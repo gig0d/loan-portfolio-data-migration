@@ -4,9 +4,13 @@ A portfolio project that will migrate messy, **synthetic** loan portfolio CSV
 exports into a normalized relational database, with data quality checks,
 rejected-record reports, and reconciliation.
 
-**Current status: Phase 3 complete (extract and transform).** Synthetic exports
-can now be read, standardized, and inspected for duplicates. Validation,
-database loading, and reconciliation are planned for later phases.
+**Current status: Phase 4 complete (validation).** Synthetic exports can be read,
+standardized, and validated, with one auditable outcome per source record.
+Database loading and reconciliation are planned for later phases.
+
+New to the project? Follow the [owner's walkthrough](docs/RUNBOOK.md) from setup
+onward. It separates what is already prepared from your own steps in VS Code,
+PowerShell, and GitHub, including a fresh-computer route.
 
 ## Why I am building this
 
@@ -139,12 +143,41 @@ Different customer IDs sharing a normalized email are flagged for review and
 retained. Conversion problems keep their raw value and generate a diagnostic.
 These are inspection outputs, **not validated records or a migration report**.
 Invalid emails, country codes, orphan references, and negative payments still
-need the Phase 4 rules.
+need the separate validation command below.
 
 For the default seed and size, the cleaned counts are 1,050 customers, 1,000
 loans, and 2,000 payments. There are 50 removed exact duplicates, 100 customer
 rows flagged for duplicate review, and no conversion issues. Zero conversion
 issues does not mean that all records pass data quality validation.
+
+## Validate and inspect rejections
+
+```powershell
+.\.venv\Scripts\python.exe -m migration.validate --input-dir data/legacy --output-dir data/output
+```
+
+On macOS / Linux, use `.venv/bin/python`. Validation reads the source exports,
+transforms them in memory, and writes `customers_valid.csv`, `loans_valid.csv`,
+`payments_valid.csv`, and `rejected_records.csv`. It does not rely on manually
+edited cleaned files or load a database. These four outputs are replaced on
+repeat runs and remain ignored by Git.
+
+The [rule catalog](docs/VALIDATION_RULES.md) explains all 13 named rules. Countries
+use the local ISO catalog provided by `pycountry`; email checks use basic syntax.
+Both records in a probable duplicate group require review. Loans and payments
+must reference parents that passed validation.
+
+| Default table | Read | Accepted | Rejected |
+| --- | ---: | ---: | ---: |
+| Customers | 1,100 | 650 | 450 |
+| Loans | 1,000 | 500 | 500 |
+| Payments | 2,000 | 950 | 1,050 |
+
+There is one rejection row per rejected source record, including removed exact
+duplicates. `rule` and `reason` show its first failure; `violations` contains all
+failures, and `record_json` preserves the original source fields. This avoids
+double-counting rows with several problems. Accepted counts are not loaded
+counts; the transactional database load arrives in Phase 5.
 
 ## Project structure
 
@@ -158,7 +191,8 @@ loan-portfolio-data-migration/
 ├── .gitignore
 ├── docs/
 │   ├── DESIGN.md
-│   └── RUNBOOK.md
+│   ├── RUNBOOK.md
+│   └── VALIDATION_RULES.md
 ├── data/
 │   ├── legacy/
 │   │   └── sample/              # Tiny tracked synthetic CSV sample
@@ -179,7 +213,8 @@ loan-portfolio-data-migration/
     ├── test_scaffold.py
     ├── test_generate_legacy_data.py
     ├── test_extract.py
-    └── test_transform.py
+    ├── test_transform.py
+    └── test_validate.py
 ```
 
 ## Implementation phases
@@ -188,7 +223,7 @@ loan-portfolio-data-migration/
    documentation, and import smoke tests.
 2. **Data generator — complete:** reproducible messy CSVs and a tiny synthetic sample.
 3. **Extract and transform — complete:** standardize fields and identify duplicates.
-4. Validate: named rules and rejected-record reports.
+4. **Validate — complete:** named rules and rejected-record reports.
 5. Load: constrained schema, transactions, and idempotent loading.
 6. Reconcile: counts, rejection breakdown, and a PASS/FAIL accounting check.
 7. CLI and tests: commands and meaningful end-to-end checks.

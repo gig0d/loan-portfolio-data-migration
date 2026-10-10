@@ -7,6 +7,7 @@ SQLAlchemy>=2.0,<3
 Faker==40.43.0
 python-dotenv>=1.0,<2
 PyMySQL>=1.1,<2
+pycountry==24.6.1
 
 # Testing and linting
 pytest>=8,<10

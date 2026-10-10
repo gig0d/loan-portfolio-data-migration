@@ -32,11 +32,9 @@
 
 ## Topics to resolve in later phases
 
-- Define how flagged probable customer duplicates are reviewed or rejected.
-- Assign named validation rules and determine dependent-record handling.
 - Define idempotent loading and SQLite/MySQL schema differences.
-- Count removed duplicates explicitly so reconciliation accounts for every
-  source row and can check `read = loaded + rejected` without losing records.
+- Use the explicit duplicate rejection outcomes in the final reconciliation
+  check so it can account for every source record.
 
 ## Phase 2: synthetic legacy generator
 
@@ -85,7 +83,7 @@
 ## Planned SQL work (Phase 5)
 
 The following describes future work; `sql/schema.sql` still contains comments
-only, and no database is created in Phase 3.
+only, and no database is created in Phase 4.
 
 | Table | Source fields | Planned relationship |
 | --- | --- | --- |
@@ -170,3 +168,51 @@ integrity; they do not replace rejected-record explanations.
   expected default counts, inspection steps, and common errors. SQLite will
   not require a separate database application; MySQL setup instructions will be
   added when that backend is implemented and tested.
+
+## Phase 4: validation and rejected-record reporting
+
+- **Named, explicit rules.** Small public customer, loan, and payment validators
+  return `Violation` objects with a code, field, and human-readable reason.
+  `docs/VALIDATION_RULES.md` describes the 13 rules. Every source business field
+  is required in this demo; provenance and duplicate flags are metadata.
+- **Local ISO country lookup.** `pycountry==24.6.1` supplies the ISO 3166-1
+  alpha-2 catalog, avoiding a hand-maintained country list or an online service.
+  Valid countries outside the generator's five-code subset also pass. This is
+  an added data dependency, not a validation framework. See the
+  [library documentation](https://github.com/pycountry/pycountry#countries-iso-3166-1).
+- **Pragmatic field checks.** Email checks cover basic syntax, not mailbox
+  ownership or full RFC compliance. Dates must have converted to Python `date`.
+  Money must be finite `Decimal` at no more than cent precision and strictly
+  positive. Canonical loan statuses are `active` and `closed`.
+- **No arbitrary identity choice.** All conflicting rows sharing a normalized
+  primary ID are rejected. Every member of a probable shared-email customer
+  group is held for review. The project does not select a winner or merge
+  people automatically. This conservative policy sacrifices acceptance counts
+  in exchange for explainable identity handling.
+- **Dependency order.** Customers are validated first. Loans require accepted
+  customers, and payments require accepted loans. Missing or rejected parents
+  receive explicit reference-rule failures. Payment dates are compared only
+  against accepted loans with valid start dates.
+- **One outcome per source record.** One rejected CSV row contains its first
+  failure in `rule` and `reason`, plus every failure in JSON `violations`.
+  The first failure follows deterministic check order: missing required fields,
+  conflicting ID, then entity-specific field and relationship checks. There is
+  no hidden severity ranking. Multiple failed rules do not multiply row counts.
+- **Original payloads remain auditable.** `record_json` comes from the raw
+  extracted row, not the title-cased or parsed data. The table and `_source_row`
+  identify it even when its primary ID is blank or conflicting. Exact duplicates
+  removed during transformation receive `VR013_EXACT_DUPLICATE`, so none vanish
+  from the rejection accounting.
+- **Typed data stays in memory.** The standalone validation command starts from
+  legacy files and reuses extraction/transformation; it does not reload the
+  inspection CSVs and lose `date`/`Decimal` types. It returns `ValidationResult`
+  for the future loader and writes three accepted CSVs plus rejected records.
+- **Acceptance is not loading.** The stage accounts for `read = accepted +
+  rejected`, with source-row tests checking disjoint outcomes and full coverage.
+  No SQL is executed yet. The final loaded counts, named-rule breakdown, and
+  reconciliation report remain Phase 6 work.
+- **Owner instructions from the beginning.** The rewritten runbook separates
+  current-workspace checks from fresh-machine setup, then covers configuration,
+  interpreter selection, generation, cleanup, validation, checks, commits,
+  GitHub author settings, and personal portfolio tasks. Account changes remain
+  the owner's choices. Project documentation remains in English.
