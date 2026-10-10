@@ -1,4 +1,4 @@
-# Owner's walkthrough: from setup to Phase 4
+# Owner's walkthrough: from setup to Phase 5
 
 This is the complete Windows checklist for the project owner. Follow it in order,
 one command at a time. Paste commands into **PowerShell**, not a Python file or
@@ -9,7 +9,7 @@ fails, stop at that step and use the troubleshooting section.
 
 On the current computer, the assistant has prepared Python's `.venv`, installed
 dependencies, created the project files, generated data, run the pipeline through
-Phase 4, tested it, and pushed the completed phases to your GitHub repository.
+Phase 5, tested it, and pushed the completed phases to your GitHub repository.
 Python and Git are installed. You do not need to recreate files, initialize Git
 again, create another repository, or repeat an existing commit.
 
@@ -23,9 +23,10 @@ portfolio presentation are also your choices.
 | 2: generation | Reproducible generator and tiny sample | Run step 7 and inspect deliberate defects |
 | 3: cleanup | Extraction, conversions, duplicate diagnostics | Run step 8 and inspect cleaned data |
 | 4: validation | Named rules, accepted CSVs, rejection report | Run step 9 and read a rejection |
+| 5: loading | SQL schema, transactions, repeat-load handling | Follow step 9a; no SQL server is needed for SQLite |
 | Checks and GitHub | Tests and phase commits | Verify steps 10-11; commit only your own new changes |
 | Portfolio | README and design explanations | Complete step 12 and write your final learning section |
-| 5-8 | Still planned | Review the current phase before authorizing the next one |
+| 6-8 | Still planned | Review the current phase before authorizing the next one |
 
 **Current-computer route:** start at step 1. Use the verification commands; skip
 installation and cloning branches when the item already exists.
@@ -189,9 +190,11 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
 Open `.env` in VS Code. Keep SQLite and the supplied default paths and seed.
-Leave MySQL's example commented out. The standalone commands do not read `.env`
-yet; this prepares settings for the later pipeline. There are no SQLite database
+Leave MySQL's example commented out. The Phase 5 loader reads `.env`; the other
+standalone commands still use explicit arguments. There are no SQLite database
 credentials to obtain. Existing `.env` settings are preserved by the command.
+New optional keys such as `SCHEMA_PATH` have defaults, so do not overwrite your
+existing `.env`. Shell environment values override values in this file.
 
 Check ignored paths:
 
@@ -328,9 +331,199 @@ also reject its loans and payments because an accepted parent is required.
 Ambiguous customer groups are held for review without selecting one identity.
 Exact duplicates receive explicit rejection outcomes too.
 
-This replaces four validation outputs. Accepted CSVs await the future load
-step; no database has been created or populated. Expected counts apply to 1,000
-base customers, seed 42, and the documented rules.
+This replaces four validation outputs. This command alone does not create or
+populate a database; the next step does. Expected counts apply to 1,000 base
+customers, seed 42, and the documented rules.
+
+## 9a. Phase 5: create, load, and inspect SQLite
+
+Use the default SQLite route first. Everything below runs in VS Code's integrated
+PowerShell terminal. No database server, Workbench, or SQL extension is needed.
+
+1. Open the project root using step 1. Open `.env` in the editor and confirm:
+
+   ```dotenv
+   DATABASE_URL=sqlite:///data/output/loan_portfolio.db
+   LEGACY_DATA_DIR=data/legacy
+   OUTPUT_DATA_DIR=data/output
+   ```
+
+   Save the file. Keep passwords out of committed files. No new SQL statements
+   need to be typed manually to create these tables.
+2. If you have not generated the default source files, run step 7. Existing
+   default exports can be reused. Then run:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m migration.load
+   ```
+
+   It reads, cleans, and validates the CSVs; replaces the accepted/rejected CSV
+   outputs; creates the schema; and loads accepted records. It does not read
+   manually edited accepted CSVs. With a fresh database, expect:
+
+   ```text
+   INFO: Loaded customers: 650 inserted; 0 already present; 650 accepted confirmed
+   INFO: Loaded loans: 500 inserted; 0 already present; 500 accepted confirmed
+   INFO: Loaded payments: 950 inserted; 0 already present; 950 accepted confirmed
+   ```
+
+   On this computer, the assistant already ran the load. Your first personal run
+   can therefore show zero inserted and those counts already present.
+3. Verify that the database exists and stays excluded from Git:
+
+   ```powershell
+   Test-Path data/output/loan_portfolio.db
+   git check-ignore data/output/loan_portfolio.db
+   ```
+
+   Expect `True` and the database path. A `.db` file is the database, not a text
+   document to edit. You do not need to commit or upload it.
+4. Repeat exactly the load command from item 2. Expect **0 inserted** for all
+   three tables, with 650/500/950 already present. Repeating a snapshot does not
+   create duplicates. A changed existing ID instead stops the load and rolls
+   back all new rows; earlier committed records remain intact.
+5. Inspect actual SQL counts using Python's bundled SQLite shell. This shell
+   requires Python 3.12+; the current computer has Python 3.13.14:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m sqlite3 data/output/loan_portfolio.db
+   ```
+
+   At the `sqlite>` prompt, enter these statements one at a time, including `;`:
+
+   ```sql
+   SELECT 'customers' AS table_name, COUNT(*) AS rows FROM customers
+   UNION ALL SELECT 'loans', COUNT(*) FROM loans
+   UNION ALL SELECT 'payments', COUNT(*) FROM payments;
+   SELECT loan_id, customer_id, principal_amount_cents, status FROM loans LIMIT 5;
+   SELECT COUNT(*) FROM loans l LEFT JOIN customers c
+     ON l.customer_id = c.customer_id WHERE c.customer_id IS NULL;
+   SELECT COUNT(*) FROM payments p LEFT JOIN loans l
+     ON p.loan_id = l.loan_id WHERE l.loan_id IS NULL;
+   PRAGMA foreign_key_check;
+   ```
+
+   Expect counts 650/500/950, both orphan queries equal to zero, and no rows from
+   `foreign_key_check`. For example, 120050 cents means 1200.50 monetary units.
+   These checks do not replace the Phase 6 reconciliation report.
+6. Enter `.quit` without a semicolon to return to PowerShell. Run step 10.
+
+For Python 3.11, use this equivalent read-only inspection in PowerShell instead
+of the SQLite shell. It also honors a configured database path:
+
+```powershell
+@'
+import logging
+from sqlalchemy import text
+from migration.config import load_settings
+from migration.load import create_database_engine
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+engine = create_database_engine(load_settings().database_url)
+try:
+    with engine.connect() as connection:
+        for table in ("customers", "loans", "payments"):
+            count = connection.scalar(text(f"SELECT COUNT(*) FROM {table}"))
+            logging.info("%s: %s", table, count)
+finally:
+    engine.dispose()
+'@ | .\.venv\Scripts\python.exe -
+```
+
+**Different synthetic snapshot:** choose a new unused SQLite filename in `.env`,
+such as `DATABASE_URL=sqlite:///data/output/loan_portfolio_seed7.db`, before
+loading data generated with a different seed. A fresh schema is created there.
+Do not delete your previous database to resolve an unexplained conflict.
+
+## 9b. Optional MySQL route: separate server required
+
+Skip this section for the default project. MySQL is selectable by URL, but the
+live integration test has not been run in this workspace. SQLite is sufficient
+for the current phase. Follow this route only to try the optional backend.
+
+1. If a local MySQL server is absent, download the **MySQL Community Server 8.4
+   Windows MSI** from [official downloads](https://dev.mysql.com/downloads/mysql/).
+   Run the MSI and MySQL Configurator. Choose a development-machine
+   configuration, TCP port 3306, and a local Windows service; keep the default
+   service account. Set your own root password and finish initialization. This
+   route needs no router or Workbench installation. See the
+   [official Windows installation guide](https://dev.mysql.com/doc/refman/8.4/en/windows-installation.html).
+2. Back in PowerShell, open the MySQL client. For a standard 8.4 installation:
+
+   ```powershell
+   $portfolioMysqlClient = 'C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe'
+   Test-Path $portfolioMysqlClient
+   & $portfolioMysqlClient -u root -p
+   ```
+
+   If the path is absent, use the actual installation directory chosen in item 1.
+   Enter the root password at its prompt, not as a command argument.
+3. At `mysql>`, run the following SQL one statement at a time. Replace the
+   password placeholder with a new local password of your choosing. Keep that
+   password only in your local configuration, never in a tracked file:
+
+   ```sql
+   CREATE DATABASE loan_portfolio CHARACTER SET utf8mb4;
+   CREATE USER 'portfolio_loader'@'localhost' IDENTIFIED BY 'REPLACE_WITH_LOCAL_PASSWORD';
+   GRANT SELECT, INSERT, CREATE, REFERENCES ON loan_portfolio.*
+     TO 'portfolio_loader'@'localhost';
+   SELECT VERSION();
+   ```
+
+   Use a new empty database. The loader does not create databases or users and
+   refuses versions below 8.0.16 and MariaDB. The account grants follow
+   [MySQL's account documentation](https://dev.mysql.com/doc/refman/8.4/en/grant.html).
+   Enter `exit` to return to PowerShell.
+4. Install the current requirements using step 4, including PyMySQL's RSA extra.
+   In VS Code, edit only your ignored `.env`:
+
+   ```dotenv
+   DATABASE_URL=mysql+pymysql://portfolio_loader:REPLACE_WITH_LOCAL_PASSWORD@localhost:3306/loan_portfolio
+   ```
+
+   Substitute your local password. URL-reserved characters in it must be percent
+   encoded (for example `@` becomes `%40`, `#` becomes `%23`, `%` becomes `%25`).
+   Save and run `git check-ignore .env`. Do not share its contents.
+5. Run `.\.venv\Scripts\python.exe -m migration.load` twice in PowerShell.
+   Expect the same first/repeat counts as SQLite. In the MySQL client, verify:
+
+   ```sql
+   USE loan_portfolio;
+   SELECT COUNT(*) FROM customers;
+   SELECT COUNT(*) FROM loans;
+   SELECT COUNT(*) FROM payments;
+   SHOW CREATE TABLE loans;
+   ```
+
+   The loader selects InnoDB, requires existing tables to use it, and creates
+   positive-money/status checks. A load failure rolls back new rows, but MySQL
+   schema DDL is separate and can leave empty tables.
+6. To verify the opt-in test, create a **different empty disposable database**
+   in the root client, then grant the same scoped rights:
+
+   ```sql
+   CREATE DATABASE loan_portfolio_test CHARACTER SET utf8mb4;
+   GRANT SELECT, INSERT, CREATE, REFERENCES ON loan_portfolio_test.*
+     TO 'portfolio_loader'@'localhost';
+   ```
+
+   In PowerShell, enter its URL at a hidden prompt so the password is not typed
+   into command history. Use the same encoded password and database
+   `loan_portfolio_test`:
+
+   ```powershell
+   $portfolioTestSecret = Read-Host 'MySQL test URL for the empty disposable database' -AsSecureString
+   $env:TEST_MYSQL_DATABASE_URL = [System.Net.NetworkCredential]::new('', $portfolioTestSecret).Password
+   .\.venv\Scripts\python.exe -m pytest tests/test_load.py -k mysql
+   Remove-Item Env:TEST_MYSQL_DATABASE_URL
+   Remove-Variable portfolioTestSecret
+   ```
+
+   The test creates tables, verifies rollback, and loads a 20-customer synthetic
+   fixture twice. It intentionally leaves the successful fixture in this
+   disposable database. A second test run needs a new empty test database; it
+   will not delete external data for you.
+7. To return to SQLite, restore its `DATABASE_URL` in `.env`. Do not commit
+   database files, passwords, or test connection URLs.
 
 ## 10. Run checks and verify that outputs stay local
 
@@ -360,7 +553,7 @@ git status --short --branch
 
 Refresh GitHub's **Code** tab on branch `main` and open its commit history. Expect
 the same latest commit and changed files. This phase's message is
-`feat: validate portfolio records and document owner workflow`.
+`feat: load validated portfolio data transactionally`.
 
 If you later make a real README change, such as writing your learning section,
 use this separate workflow:
@@ -404,15 +597,12 @@ do not force-push.
 
 | Phase | Assistant work | Your task afterward |
 | --- | --- | --- |
-| 5 | Schema, transactional loading, idempotency | Follow new SQL run steps, inspect counts, repeat the load |
 | 6 | Reconciliation report and PASS/FAIL | Read the report and explain source accounting |
 | 7 | Unified CLI | Practice the simpler `generate`, `run`, and `report` commands |
 | 8 | Final diagram, documentation, report example | Write your learning section and review the GitHub presentation |
 
-Python will create SQLite as a local file, so the default does not need a server
-or database GUI. SQL execution steps will be added in Phase 5. Optional MySQL
-will have a separate installation, database creation, configuration, and
-connection walkthrough when implemented. There is no MySQL setup for Phase 4.
+Phase 5's default SQL steps are available in step 9a. The optional MySQL route
+is step 9b; it is not needed to complete the remaining phases with SQLite.
 
 ## Troubleshooting: stop at the failing step
 
@@ -425,6 +615,9 @@ connection walkthrough when implemented. There is no MySQL setup for Phase 4.
 | Missing legacy export | Run step 7 and repeat step 8 or 9 |
 | Unexpected headers or malformed CSV | Regenerate with step 7; do not silently drop fields |
 | Cannot write output | Close applications holding the CSV open; check the directory is writable |
+| Changed existing ID during load | Review the snapshot; use a new database filename for a different seed |
+| Database load failed | Check the configured database, schema, permissions, and constraints; no new portfolio rows were committed |
+| `No module named sqlite3.__main__` | Python 3.11 lacks the bundled shell; use the inspection snippet in step 9a |
 | Dubious ownership | Use the exact-directory trust instructions in step 3 |
 | Nothing to commit | Check status; no commit is needed for unchanged files |
 | Push authentication fails | Use the credential-manager sign-in as the owner; provide persistent error text |

@@ -32,7 +32,7 @@
 
 ## Topics to resolve in later phases
 
-- Define idempotent loading and SQLite/MySQL schema differences.
+- Run the optional live MySQL integration test on a disposable server database.
 - Use the explicit duplicate rejection outcomes in the final reconciliation
   check so it can account for every source record.
 
@@ -80,10 +80,10 @@
   behavior, check the intentional defects and relationships, and exercise invalid
   sizes, filesystem errors, and the standalone command.
 
-## Planned SQL work (Phase 5)
+## SQL plan recorded before Phase 5
 
-The following describes future work; `sql/schema.sql` still contains comments
-only, and no database is created in Phase 4.
+The following was the plan during Phase 4, when no database was created.
+Phase 5 decisions and implementation details are recorded below.
 
 | Table | Source fields | Planned relationship |
 | --- | --- | --- |
@@ -216,3 +216,59 @@ integrity; they do not replace rejected-record explanations.
   interpreter selection, generation, cleanup, validation, checks, commits,
   GitHub author settings, and personal portfolio tasks. Account changes remain
   the owner's choices. Project documentation remains in English.
+
+## Phase 5: relational schema and transactional loading
+
+- **One SQL schema, reflected by SQLAlchemy Core.** The loader executes the
+  trusted checkout's simple DDL file and reflects its columns; there is no ORM
+  or second Python table definition. The script contains three CREATE TABLE
+  statements, without procedures or semicolons inside values. Primary keys and
+  NOT NULL protect identity and required fields. Unique customer emails enforce
+  the conservative shared-email policy established in Phase 4. Composite unique
+  indexes beginning with the parent ID support relationship lookups on both
+  databases; their uniqueness is already implied by each child primary key.
+- **Exact money in integer cents.** `principal_amount` and `amount` remain
+  Decimal during cleaning/validation; the database stores their integer-cent
+  equivalents with an explicit 9,000,000,000,000,000-cent maximum below BIGINT's
+  limit. The loader refuses rounding, overflow, or oversized text. These storage
+  failures stop the transaction rather than inventing a new rejection rule.
+  SQLite type affinity is weaker than MySQL typing; application conversion
+  guarantees integer cents on this load path.
+- **Environment configuration now serves the loader.** `.env` is read without
+  changing process variables; shell values win. Relative configured data,
+  database, and schema paths resolve from the checkout, not the working directory.
+  Standalone generation/cleanup/validation retain their explicit arguments until
+  Phase 7. Safe defaults let an existing `.env` omit newly added `SCHEMA_PATH`.
+  Connection URLs and driver exceptions are not printed with credentials.
+- **SQLite integrity and transactions are explicit.** Every connection enables
+  foreign keys before a transaction. SQLAlchemy emits BEGIN explicitly, avoiding
+  dependence on Python sqlite3's legacy transaction behavior. See the
+  [SQLAlchemy SQLite documentation](https://docs.sqlalchemy.org/en/20/dialects/sqlite.html#foreign-key-support).
+- **Schema creation precedes the data transaction.** All new customers, loans,
+  and payments load in a single `engine.begin()` block, in dependency order.
+  Any exception rolls back all new rows, preserving previously committed data.
+  Empty tables can remain after failure: MySQL CREATE TABLE can commit implicitly.
+  See [MySQL implicit commits](https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html).
+  Existing schemas are not upgraded; this portfolio targets fresh databases.
+- **Identical IDs are confirmed, changed IDs fail.** Every incoming business
+  column is compared with its existing record. Matching rows are counted as
+  already present; new rows are inserted; conflicting values stop the load.
+  There is no INSERT IGNORE, automatic overwrite, or deletion of earlier rows.
+  Selecting existing rows is easy to explain at portfolio scale; a large
+  production migration would query keys in batches instead.
+- **Per-run outcomes support future reconciliation.** `LoadResult` separates
+  inserted and already-present records. `loaded_counts` is their sum for the
+  current accepted source set, not the database's lifetime total. Counts are
+  returned/logged only after commit. Phase 6 will combine these outcomes with
+  source and rejection counts; no reconciliation report is implemented here.
+- **MySQL has explicit prerequisites and an honest test boundary.** The URL
+  selects PyMySQL, tables use InnoDB/utf8mb4, and versions before 8.0.16 or MariaDB
+  are refused. That minimum is needed for enforced
+  [MySQL CHECK constraints](https://dev.mysql.com/doc/refman/8.0/en/create-table-check-constraints.html).
+  PyMySQL's RSA extra supports modern password authentication. MySQL is optional
+  and has not been verified against a live server here; an opt-in integration
+  test checks rollback and repeat loads using an empty disposable database.
+- **Meaningful load checks.** SQLite tests exercise keys, required fields,
+  foreign keys, unique emails, positive amounts, status constraints, exact cents,
+  changed-ID rollback after new parent inserts, child-failure rollback, repeat
+  loading, empty accepted sets, configuration precedence, and command errors.

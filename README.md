@@ -4,9 +4,10 @@ A portfolio project that will migrate messy, **synthetic** loan portfolio CSV
 exports into a normalized relational database, with data quality checks,
 rejected-record reports, and reconciliation.
 
-**Current status: Phase 4 complete (validation).** Synthetic exports can be read,
-standardized, and validated, with one auditable outcome per source record.
-Database loading and reconciliation are planned for later phases.
+**Current status: Phase 5 complete (database loading).** Synthetic exports can
+be cleaned, validated, and loaded into constrained relational tables. Repeated
+loads preserve identical records; failures roll back all new portfolio rows.
+Reconciliation is planned for Phase 6.
 
 New to the project? Follow the [owner's walkthrough](docs/RUNBOOK.md) from setup
 onward. It separates what is already prepared from your own steps in VS Code,
@@ -33,8 +34,9 @@ will account for each source record.
 ## Tech stack
 
 Python 3.11+, pandas, SQLAlchemy, SQLite, Faker, pytest, and ruff.
-`python-dotenv` will support local configuration; PyMySQL will support the
-optional MySQL connection through `DATABASE_URL`.
+`python-dotenv` reads local configuration for the loader. PyMySQL supports the
+optional MySQL connection through `DATABASE_URL`; SQLite is verified locally,
+while MySQL requires the separate integration test described in the runbook.
 
 ## Set up locally
 
@@ -67,8 +69,9 @@ cp .env.example .env
 The requirements install the local package in editable mode, so imports work
 from the `src` layout without setting `PYTHONPATH`.
 
-`.env.example` documents the planned configuration. Configuration loading and
-the `generate`, `run`, and `report` commands will be implemented in later phases.
+`.env.example` documents the loader's configuration. Shell environment variables
+override `.env`; relative configured paths resolve from the repository root.
+The unified `generate`, `run`, and `report` commands arrive in Phase 7.
 
 ## Generate synthetic legacy data
 
@@ -132,7 +135,7 @@ On macOS / Linux, use `.venv/bin/python` instead. The output directory contains
 `customers_cleaned.csv`, `loans_cleaned.csv`, `payments_cleaned.csv`,
 `exact_duplicates.csv`, `probable_duplicates.csv`, and `transformation_issues.csv`.
 Running this command again replaces those six outputs; the source files remain
-unchanged. Paths are explicit arguments, and `.env` loading is still deferred.
+unchanged. This standalone transformation command uses explicit path arguments.
 
 Dates use ISO format in the output; names, emails, identifiers, and statuses
 have consistent casing; amounts use exact cents. Blank fields become missing
@@ -177,7 +180,42 @@ There is one rejection row per rejected source record, including removed exact
 duplicates. `rule` and `reason` show its first failure; `violations` contains all
 failures, and `record_json` preserves the original source fields. This avoids
 double-counting rows with several problems. Accepted counts are not loaded
-counts; the transactional database load arrives in Phase 5.
+counts; the loader below confirms their presence in the database.
+
+## Load the relational database
+
+With the default SQLite configuration, no server or database GUI is needed:
+
+```powershell
+.\.venv\Scripts\python.exe -m migration.load
+```
+
+The command reads `.env`, validates the legacy CSVs again, writes the validation
+outputs, creates tables from [sql/schema.sql](sql/schema.sql), and loads accepted
+customers, loans, and payments in one transaction. The default database is
+`data/output/loan_portfolio.db`, which stays ignored by Git. See
+[the SQL walkthrough](docs/RUNBOOK.md#9a-phase-5-create-load-and-inspect-sqlite)
+for exact steps to inspect it using Python's bundled SQLite shell.
+
+The default first run inserts 650 customers, 500 loans, and 950 payments. Repeat
+the same command: it inserts zero rows and confirms those same records already
+exist. An existing ID with changed values stops the load and rolls back new
+rows; use a separate database for a different synthetic snapshot. Existing rows
+are never silently updated or removed.
+
+Money uses `principal_amount_cents` and `amount_cents` in SQL: `1200.50` becomes
+`120050`, exactly. Primary keys, required fields, unique customer emails,
+foreign keys, positive amounts, and allowed statuses protect the target tables.
+Email/country syntax and payment chronology remain Python validation rules.
+
+Schema creation happens before the data transaction because MySQL DDL can commit
+implicitly. A failed load can leave empty tables, but cannot leave partly loaded
+new portfolio records. `CREATE TABLE IF NOT EXISTS` does not upgrade an older
+schema. This project uses fresh databases, not schema migrations.
+
+To try MySQL, follow the optional setup in the runbook and set `DATABASE_URL` in
+your ignored `.env`. It requires MySQL 8.0.16+ and InnoDB. The SQLite tests pass;
+the live MySQL test is skipped until an empty test server database is supplied.
 
 ## Project structure
 
@@ -214,7 +252,9 @@ loan-portfolio-data-migration/
     ├── test_generate_legacy_data.py
     ├── test_extract.py
     ├── test_transform.py
-    └── test_validate.py
+    ├── test_validate.py
+    ├── test_config.py
+    └── test_load.py
 ```
 
 ## Implementation phases
@@ -224,7 +264,7 @@ loan-portfolio-data-migration/
 2. **Data generator — complete:** reproducible messy CSVs and a tiny synthetic sample.
 3. **Extract and transform — complete:** standardize fields and identify duplicates.
 4. **Validate — complete:** named rules and rejected-record reports.
-5. Load: constrained schema, transactions, and idempotent loading.
+5. **Load — complete:** constrained schema, transactions, and idempotent loading.
 6. Reconcile: counts, rejection breakdown, and a PASS/FAIL accounting check.
 7. CLI and tests: commands and meaningful end-to-end checks.
 8. Documentation: architecture diagram, usage examples, and example report.
