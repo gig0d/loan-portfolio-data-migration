@@ -4,9 +4,9 @@ A portfolio project that will migrate messy, **synthetic** loan portfolio CSV
 exports into a normalized relational database, with data quality checks,
 rejected-record reports, and reconciliation.
 
-**Current status: Phase 2 complete (synthetic data generator).** Setup and
-reproducible messy CSV exports are ready. Cleaning, validation, database loading,
-and reconciliation are planned for later phases.
+**Current status: Phase 3 complete (extract and transform).** Synthetic exports
+can now be read, standardized, and inspected for duplicates. Validation,
+database loading, and reconciliation are planned for later phases.
 
 ## Why I am building this
 
@@ -115,6 +115,37 @@ customers and seed 42 (12 customer rows, 10 loan rows, and 20 payment rows):
 The full exports remain ignored by Git. Generation does not clean records or
 create a database.
 
+## Extract and transform
+
+For exact Windows PowerShell steps and expected outputs, follow the
+[execution runbook](docs/RUNBOOK.md). The cleaning command is:
+
+```powershell
+.\.venv\Scripts\python.exe -m migration.transform --input-dir data/legacy --output-dir data/output
+```
+
+On macOS / Linux, use `.venv/bin/python` instead. The output directory contains
+`customers_cleaned.csv`, `loans_cleaned.csv`, `payments_cleaned.csv`,
+`exact_duplicates.csv`, `probable_duplicates.csv`, and `transformation_issues.csv`.
+Running this command again replaces those six outputs; the source files remain
+unchanged. Paths are explicit arguments, and `.env` loading is still deferred.
+
+Dates use ISO format in the output; names, emails, identifiers, and statuses
+have consistent casing; amounts use exact cents. Blank fields become missing
+values. `_source_row` identifies the original record position.
+
+Exact source duplicates are removed from cleaned tables and saved separately.
+Different customer IDs sharing a normalized email are flagged for review and
+retained. Conversion problems keep their raw value and generate a diagnostic.
+These are inspection outputs, **not validated records or a migration report**.
+Invalid emails, country codes, orphan references, and negative payments still
+need the Phase 4 rules.
+
+For the default seed and size, the cleaned counts are 1,050 customers, 1,000
+loans, and 2,000 payments. There are 50 removed exact duplicates, 100 customer
+rows flagged for duplicate review, and no conversion issues. Zero conversion
+issues does not mean that all records pass data quality validation.
+
 ## Project structure
 
 ```text
@@ -126,7 +157,8 @@ loan-portfolio-data-migration/
 ├── .env.example
 ├── .gitignore
 ├── docs/
-│   └── DESIGN.md
+│   ├── DESIGN.md
+│   └── RUNBOOK.md
 ├── data/
 │   ├── legacy/
 │   │   └── sample/              # Tiny tracked synthetic CSV sample
@@ -145,7 +177,9 @@ loan-portfolio-data-migration/
 │   └── schema.sql
 └── tests/
     ├── test_scaffold.py
-    └── test_generate_legacy_data.py
+    ├── test_generate_legacy_data.py
+    ├── test_extract.py
+    └── test_transform.py
 ```
 
 ## Implementation phases
@@ -153,7 +187,7 @@ loan-portfolio-data-migration/
 1. **Setup — complete:** structure, configuration examples, package skeleton,
    documentation, and import smoke tests.
 2. **Data generator — complete:** reproducible messy CSVs and a tiny synthetic sample.
-3. Extract and transform: standardize fields and identify duplicates.
+3. **Extract and transform — complete:** standardize fields and identify duplicates.
 4. Validate: named rules and rejected-record reports.
 5. Load: constrained schema, transactions, and idempotent loading.
 6. Reconcile: counts, rejection breakdown, and a PASS/FAIL accounting check.

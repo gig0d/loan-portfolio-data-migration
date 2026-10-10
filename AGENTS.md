@@ -7,6 +7,8 @@
 - Keep credentials, local configuration, generated data, and reports out of Git.
 - Read configuration from the environment; `.env.example` contains safe examples.
 - Explain design decisions briefly in `docs/DESIGN.md`.
+- Document exact steps for terminal commands and external tools in
+  `docs/RUNBOOK.md`; explain the steps to the user when they are needed.
 - Run `python -m pytest` and `python -m ruff check .` after each phase.
 - Report check results and suggest a Conventional Commits message. Do not commit
   or start the next phase unless the user asks.

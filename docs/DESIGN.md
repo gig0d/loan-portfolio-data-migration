@@ -32,8 +32,7 @@
 
 ## Topics to resolve in later phases
 
-- Choose explicit date parsing rules for ambiguous dates.
-- Define how probable customer duplicates are reviewed or rejected.
+- Define how flagged probable customer duplicates are reviewed or rejected.
 - Assign named validation rules and determine dependent-record handling.
 - Define idempotent loading and SQLite/MySQL schema differences.
 - Count removed duplicates explicitly so reconciliation accounts for every
@@ -86,7 +85,7 @@
 ## Planned SQL work (Phase 5)
 
 The following describes future work; `sql/schema.sql` still contains comments
-only, and no database is created in Phase 2.
+only, and no database is created in Phase 3.
 
 | Table | Source fields | Planned relationship |
 | --- | --- | --- |
@@ -116,3 +115,58 @@ only, and no database is created in Phase 2.
 Named email, country, duplicate, and cross-table date rules belong to the Python
 validation phase. SQL constraints complement these rules and preserve relational
 integrity; they do not replace rejected-record explanations.
+
+## Phase 3: extraction and transformation
+
+- **Text-first extraction.** Pandas reads every source field as text, preserving
+  leading zeros, whitespace, blank fields, and literal values such as `NA`.
+  Expected headers are checked. Missing files, incompatible headers, malformed
+  CSVs, and decoding errors stop the step with a helpful file-specific message.
+  Blank records are retained; excess fields must not be silently truncated.
+- **Source provenance.** `_source_row` numbers CSV records from 2, counting the
+  header as record 1. It is a record position, not a physical line number for
+  CSVs with multiline quoted fields. It survives cleaning and duplicate removal.
+- **Explicit dates.** `YYYY-MM-DD` is ISO, slash-separated `DD/MM/YYYY` is day
+  first, and two-digit-first hyphen-separated `MM-DD-YYYY` is month first.
+  For example, `03/04/2024` means April 3 and `03-04-2024` means March 4.
+  Unsupported formats and impossible dates are diagnosed, never guessed.
+- **Conservative money parsing.** Supported plain or dollar-formatted amounts
+  become `Decimal` values with two decimal places. Commas must form valid
+  thousands groups. Extra decimal places, other currencies, exponent notation,
+  and non-finite tokens are not silently rounded or interpreted. Negative
+  amounts remain negative for the later validation rules.
+- **Simple casing rules.** Whitespace is collapsed, blank text becomes `None`,
+  names use title case, emails use lowercase, and IDs and country codes use
+  uppercase. `ACTIVE`, `active`, and `Act.` map to `active`; `closed` and
+  `CLOSED` map to `closed`. Unknown statuses remain visible in lowercase.
+  Title case is a display convention for this synthetic demo, not a reliable
+  spelling correction for real names.
+- **Exact duplicates before normalization.** Only source rows identical across
+  all payload columns are removed, keeping the first occurrence. Provenance
+  does not participate in the comparison. Removed rows retain their raw payload
+  in `exact_duplicates.csv`. Rows sharing an ID but different source values stay
+  in the cleaned data for validation; transformation does not resolve conflicts.
+- **Probable duplicates require review.** Different normalized customer IDs
+  sharing a nonempty normalized email containing `@` are flagged in
+  `probable_duplicates.csv` and `_probable_duplicate`. Names may differ in
+  spelling. Blank or placeholder invalid emails do not group customers. This
+  signal is not email validation, an identity proof, or automatic merging.
+  It deliberately does not attempt fuzzy matching of every name pair.
+- **Conversion issues do not erase bad data.** Failed date or amount conversions
+  keep the original raw token and record table, source row, field, value, and
+  reason in `transformation_issues.csv`. Successfully converted dates and money
+  use Python `date` and `Decimal`; missing values use `None`. Invalid conversion
+  tokens remain strings and must be rejected before loading in Phase 4.
+- **Accounting remains explicit.** Each table satisfies `read = cleaned + exact
+  duplicates removed` at this stage. Flagged customers and conversion issues
+  remain part of the cleaned count. Phase 4 must classify removed duplicate
+  records explicitly so the final `read = loaded + rejected` check can account
+  for all source records. Diagnostics are not final rejection reports.
+- **Separate inspection outputs.** A standalone command writes the three
+  cleaned CSVs and three diagnostic CSVs to an explicit output directory,
+  including headers for empty diagnostics. It never alters the source exports.
+  The full migration CLI and database loading remain deferred.
+- **Repeatable walkthrough.** `docs/RUNBOOK.md` lists exact PowerShell commands,
+  expected default counts, inspection steps, and common errors. SQLite will
+  not require a separate database application; MySQL setup instructions will be
+  added when that backend is implemented and tested.
