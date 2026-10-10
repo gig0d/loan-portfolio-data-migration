@@ -1,0 +1,13 @@
+# Install the local src-layout package along with its dependencies.
+-e .
+
+# Data generation and migration
+pandas>=2.2,<3
+SQLAlchemy>=2.0,<3
+Faker==40.43.0
+python-dotenv>=1.0,<2
+PyMySQL>=1.1,<2
+
+# Testing and linting
+pytest>=8,<10
+ruff>=0.9,<1

@@ -1,0 +1,2 @@
+-- Target tables: customers, loans, and payments.
+-- Primary keys, foreign keys, and constraints will be implemented in Phase 5.

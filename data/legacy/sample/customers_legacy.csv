@@ -1,0 +1,13 @@
+customer_id,full_name,email,country_code,date_of_birth
+C000001,Allison Hill,customer000001@example.com,CR,1988-09-06
+C000002,  noah rhodes  ,customer000002@example.com,CA,13/02/1961
+C000003,Angie Henderson,invalid-email,US,12-26-1970
+C000004,Daniel Wagner,,CR,1966-04-05
+C000005,,customer000005@example.com,MX,10/05/1990
+C000006,Connie Lawrence,customer000006@example.com,,11-25-1963
+C000007,Abigail Shaffer,customer000007@example.com,ZZ,1978-12-04
+C000008,Gina Moore,customer000008@example.com,CR,
+C000009,Gabrielle Davis,customer000009@example.com,US,10-22-1969
+C000010,Ryan Munoz,customer000010@example.com,MX,1982-09-01
+C000001,Allison Hill,customer000001@example.com,CR,1988-09-06
+C000011,ALLISON HILL,customer000001@example.com,CR,1988-09-06
