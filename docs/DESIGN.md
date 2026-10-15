@@ -320,3 +320,46 @@ integrity; they do not replace rejected-record explanations.
   cancelling table errors, duplicated provenance, and missing duplicate counts,
   and cover empty/all-rejected inputs, invalid counters, report replacement,
   filesystem errors, failed-load markers, and standalone command exit codes.
+
+## Phase 7: unified CLI and end-to-end checks
+
+- **A small argparse entry point.** `python -m migration.cli` exposes `generate`,
+  `run`, and `report`, with command-specific help. It works with the existing
+  editable installation and adds no framework or console-script installation.
+  Existing standalone modules remain available for learning individual stages.
+- **Reuse the tested pipeline.** `generate` calls the existing synthetic
+  generator; `run` calls `run_reconciliation`, which validates, transactionally
+  loads, and reports using one attempt's outcomes. It does not duplicate rules
+  or reload inspection CSVs. Run outputs are the accepted CSVs, rejection CSV,
+  and Markdown report; optional transformation inspection exports still use
+  the standalone transform command.
+- **Explicit configuration precedence.** Command flags override shell variables,
+  then `.env`, then defaults. Overrides are passed to the existing configuration
+  loader without mutating the process environment. `CUSTOMER_COUNT` must be a
+  positive integer and `RANDOM_SEED` an integer. Settings are validated before
+  execution; help and argument-usage errors do not need configuration loading.
+  The older standalone generator retains its fixed argument defaults.
+- **Conventional path behavior.** Relative command-line paths resolve from the
+  caller's working directory; paths in configuration resolve from the checkout.
+  Generation's output directory overrides `LEGACY_DATA_DIR`, while run/report
+  output directories override `OUTPUT_DATA_DIR`. The database remains selected
+  by `DATABASE_URL`; credentials are not command-line options or log output.
+- **Report is a read-only view of the saved attempt.** It reads the generated
+  Markdown file and its single recognized PASS/FAIL status. It does not connect
+  to the database, refresh counts, or alter files. Missing or unrecognized reports
+  receive a helpful error directing the user to `run`. Its timestamp still
+  matters: displaying a saved PASS does not verify a changed source snapshot.
+- **Separate report data from operational logs.** Logs use logging on standard
+  error. Requested report content goes to standard output with `sys.stdout.write`,
+  without print statements; it remains visible at any log level and can be
+  redirected independently. Help and malformed arguments use argparse's normal
+  output. Exit codes are 0 for success/PASS, 1 for FAIL/operational errors, and 2
+  for usage errors. A saved FAIL is displayed and returns 1.
+- **Test real process boundaries.** New tests launch the module from a different
+  working directory with isolated synthetic inputs and temporary SQLite files.
+  They check generation bytes, persisted counts, rejections, repeat loading,
+  source preservation, flag/environment precedence, and report reads with an
+  unreachable database URL. Failure tests exercise changed-snapshot rollback,
+  inconsistent accounting, absent reports/inputs, malformed saved statuses,
+  usage errors, and credential redaction. Earlier transformation and named-rule
+  unit tests remain part of the full suite.

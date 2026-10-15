@@ -1,4 +1,4 @@
-# Owner's walkthrough: from setup to Phase 6
+# Owner's walkthrough: from setup to Phase 7
 
 This is the complete Windows checklist for the project owner. Follow it in order,
 one command at a time. Paste commands into **PowerShell**, not a Python file or
@@ -9,7 +9,7 @@ fails, stop at that step and use the troubleshooting section.
 
 On the current computer, the assistant has prepared Python's `.venv`, installed
 dependencies, created the project files, generated data, run the pipeline through
-Phase 6, tested it, and pushed the completed phases to your GitHub repository.
+Phase 7, tested it, and pushed the completed phases to your GitHub repository.
 Python and Git are installed. You do not need to recreate files, initialize Git
 again, create another repository, or repeat an existing commit.
 
@@ -25,9 +25,10 @@ portfolio presentation are also your choices.
 | 4: validation | Named rules, accepted CSVs, rejection report | Run step 9 and read a rejection |
 | 5: loading | SQL schema, transactions, repeat-load handling | Follow step 9a; no SQL server is needed for SQLite |
 | 6: reconciliation | Record counts, rejection breakdown, PASS/FAIL report | Follow step 9c and explain the accounting equation |
+| 7: CLI | Unified commands and tests across real processes | Follow step 9d for the everyday workflow |
 | Checks and GitHub | Tests and phase commits | Verify steps 10-11; commit only your own new changes |
 | Portfolio | README and design explanations | Complete step 12 and write your final learning section |
-| 7-8 | Still planned | Review the current phase before authorizing the next one |
+| 8 | Still planned | Review the current phase before authorizing the next one |
 
 **Current-computer route:** start at step 1. Use the verification commands; skip
 installation and cloning branches when the item already exists.
@@ -191,9 +192,10 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
 Open `.env` in VS Code. Keep SQLite and the supplied default paths and seed.
-Leave MySQL's example commented out. The loader and reconciliation command read
-`.env`; generation, transformation, and standalone validation still use explicit
-arguments. There are no SQLite database
+Leave MySQL's example commented out. The unified CLI, loader, and reconciliation
+command read `.env`. CLI generation reads `CUSTOMER_COUNT` and `RANDOM_SEED`;
+the older standalone generation, transformation, and validation commands retain
+their explicit arguments. There are no SQLite database
 credentials to obtain. Existing `.env` settings are preserved by the command.
 New optional keys such as `SCHEMA_PATH` have defaults, so do not overwrite your
 existing `.env`. Shell environment values override values in this file.
@@ -610,6 +612,93 @@ The output directory selects reports and validation CSVs, while `DATABASE_URL`
 still selects the database. Do not change the seed against an existing database
 snapshot; follow the separate-database guidance in step 9a instead.
 
+## 9d. Phase 7: use the unified CLI
+
+This is the everyday workflow now. Steps 7-9c remain available to understand
+individual stages; you do not need to run every earlier command first. All steps
+below run in VS Code's integrated PowerShell terminal. No new software, server,
+SQL statements, or dependency installation is required for this phase.
+
+1. Open the repository root and its PowerShell terminal using step 1. Confirm
+   the default SQLite configuration in `.env` from step 5. For the walkthrough,
+   keep `CUSTOMER_COUNT=1000` and `RANDOM_SEED=42` for the existing database.
+2. Explore help:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m migration.cli --help
+   .\.venv\Scripts\python.exe -m migration.cli generate --help
+   .\.venv\Scripts\python.exe -m migration.cli run --help
+   .\.venv\Scripts\python.exe -m migration.cli report --help
+   ```
+
+   You should see the three commands and their options. Help creates no data.
+3. Generate the synthetic source snapshot:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m migration.cli generate
+   ```
+
+   Expect 1,100 customer, 1,000 loan, and 2,000 payment rows. This replaces the
+   three legacy CSVs using the configured customer count and seed. The same
+   size, seed, and pinned Faker version produce the same CSV bytes.
+4. Run the full migration:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m migration.cli run
+   ```
+
+   It extracts, transforms, validates, loads, and reconciles. It writes the three
+   accepted CSVs, `rejected_records.csv`, and `migration_report.md` in the output
+   directory. Existing transformation inspection CSVs are not refreshed by this
+   command; use step 8 separately when inspecting those files.
+5. Immediately check the result:
+
+   ```powershell
+   $LASTEXITCODE
+   ```
+
+   Expect `0` and a `Reconciliation PASS` log. The default database confirms
+   650 customers, 500 loans, and 950 payments. On this computer these records
+   already exist, so zero new inserts is expected. Repeat `run` if desired;
+   the database counts remain unchanged.
+6. Display the saved report:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m migration.cli report
+   ```
+
+   Expect Markdown with `Overall status: PASS` and `4100 = 2100 + 2000` in the
+   table totals. This command reads the last saved attempt without connecting to
+   the database or updating the report. Use `run` to refresh the results after
+   source changes. See step 9c for interpreting the counts and rule breakdown.
+7. For the visual preview, open `data/output/migration_report.md` in VS Code and
+   press **Ctrl+Shift+V**. Nothing needs to be uploaded to GitHub for this file.
+8. Optional explicit flags for the same default snapshot:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m migration.cli generate --customers 1000 --seed 42 --output-dir data/legacy
+   .\.venv\Scripts\python.exe -m migration.cli run --input-dir data/legacy --output-dir data/output --schema-path sql/schema.sql
+   .\.venv\Scripts\python.exe -m migration.cli report --output-dir data/output --log-level ERROR
+   ```
+
+   `--size` aliases `--customers`. `--log-level` is available after every command.
+   The report remains visible even when informational logging is suppressed.
+   Flags win over shell variables, which win over `.env`, then defaults. Relative
+   flag paths use the current terminal directory; configured relative paths use
+   the repository root. `--output-dir` selects files, while `DATABASE_URL` still
+   selects the database.
+9. To try a different size or seed, choose a **new unused database filename** in
+   `.env` first, following step 9a. Then generate and run that snapshot. Reusing
+   the earlier database with changed values is intentionally rejected; it is
+   not an instruction to delete your original database.
+10. Run the checks in step 10. No new commit is needed just to run the pipeline.
+
+Exit codes: `0` means success/PASS, `1` means FAIL or an operational error,
+and `2` means invalid usage (such as an unknown command). The report command
+displays a saved FAIL and returns `1`. Missing reports direct you to `run`;
+missing CSVs direct you to generate them. Deliberate rejections do not cause a
+FAIL when all source records are accounted for.
+
 ## 10. Run checks and verify that outputs stay local
 
 Run one at a time:
@@ -638,7 +727,7 @@ git status --short --branch
 
 Refresh GitHub's **Code** tab on branch `main` and open its commit history. Expect
 the same latest commit and changed files. This phase's message is
-`feat: add migration reconciliation report`.
+`feat: add unified migration CLI and end-to-end tests`.
 
 If you later make a real README change, such as writing your learning section,
 use this separate workflow:
@@ -682,12 +771,11 @@ do not force-push.
 
 | Phase | Assistant work | Your task afterward |
 | --- | --- | --- |
-| 7 | Unified CLI | Practice the simpler `generate`, `run`, and `report` commands |
 | 8 | Final diagram, documentation, report example | Write your learning section and review the GitHub presentation |
 
 Phase 5's default SQL steps are available in step 9a. The optional MySQL route
-is step 9b. Phase 6's report steps are in step 9c. The optional MySQL route is
-not needed to complete the remaining phases with SQLite.
+is step 9b. Phase 6's report steps are in step 9c, and the unified CLI workflow
+is step 9d. The optional MySQL route is not needed to finish with SQLite.
 
 ## Troubleshooting: stop at the failing step
 
@@ -698,6 +786,9 @@ not needed to complete the remaining phases with SQLite.
 | Fresh computer has no `python` | Complete step 2 and reopen VS Code |
 | `ModuleNotFoundError`, including `pycountry` | Install `requirements.txt` using step 4, then retry |
 | Missing legacy export | Run step 7 and repeat step 8 or 9 |
+| CLI report is missing | Run `python -m migration.cli run` using the environment's interpreter, then display `report` |
+| CLI exits with code 2 | Read `--help`; check the command name, flag names, and integer arguments |
+| CLI report has no recognized status | Run the migration again to regenerate the report; avoid manually changing its status |
 | Unexpected headers or malformed CSV | Regenerate with step 7; do not silently drop fields |
 | Cannot write output | Close applications holding the CSV open; check the directory is writable |
 | Changed existing ID during load | Review the snapshot; use a new database filename for a different seed |

@@ -4,10 +4,10 @@ A portfolio project that migrates messy, **synthetic** loan portfolio CSV
 exports into a normalized relational database, with data quality checks,
 rejected-record reports, and reconciliation.
 
-**Current status: Phase 6 complete (reconciliation).** Synthetic exports can be
-cleaned, validated, loaded, and accounted for in a Markdown report. Repeated
-loads preserve identical records; data-load failures roll back all new rows.
-The unified CLI and final documentation remain planned for Phases 7 and 8.
+**Current status: Phase 7 complete (CLI and tests).** Use `generate`, `run`, and
+`report` to create synthetic data, migrate it, and inspect source accounting.
+Repeated loads preserve identical records; data-load failures roll back all new
+rows. The final documentation pass remains Phase 8.
 
 New to the project? Follow the [owner's walkthrough](docs/RUNBOOK.md) from setup
 onward. It separates what is already prepared from your own steps in VS Code,
@@ -47,7 +47,7 @@ Run these commands from the repository root with Python 3.11 or newer.
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m ruff check .
 ```
@@ -71,12 +71,56 @@ from the `src` layout without setting `PYTHONPATH`.
 
 `.env.example` documents the loader's configuration. Shell environment variables
 override `.env`; relative configured paths resolve from the repository root.
-The unified `generate`, `run`, and `report` commands arrive in Phase 7.
+The CLI also reads `CUSTOMER_COUNT` and `RANDOM_SEED`. Command flags take
+precedence over environment variables, then `.env`, then defaults.
+
+## Run with the CLI
+
+From the repository root in PowerShell, run these commands one at a time:
+
+```powershell
+.\.venv\Scripts\python.exe -m migration.cli generate
+.\.venv\Scripts\python.exe -m migration.cli run
+.\.venv\Scripts\python.exe -m migration.cli report
+```
+
+On macOS / Linux, replace `.\.venv\Scripts\python.exe` with `.venv/bin/python`.
+No additional installation is needed after the editable package setup.
+
+| Command | Action |
+| --- | --- |
+| `generate` | Replace the three legacy CSVs using the configured size/seed (defaults: 1,000 / 42) |
+| `run` | Extract, transform, validate, load, and generate the reconciliation report |
+| `report` | Display the saved report without reading source CSVs or connecting to the database |
+
+`run` writes accepted CSVs, rejected records, and the report. The earlier standalone
+transformation command remains available for cleaned CSVs and duplicate diagnostics.
+`report` shows the saved attempt's timestamp and status; rerun `run` to refresh it.
+Logs go to standard error, and `report` writes Markdown to standard output.
+
+Use `--help` after the module or any command for options. For example:
+
+```powershell
+.\.venv\Scripts\python.exe -m migration.cli generate --customers 1000 --seed 42
+.\.venv\Scripts\python.exe -m migration.cli run --input-dir data/legacy --output-dir data/output
+.\.venv\Scripts\python.exe -m migration.cli report --output-dir data/output
+```
+
+`--size` aliases `--customers`. Each command accepts `--log-level`; `run` also
+accepts `--schema-path`. Explicit relative path flags resolve from the working
+directory; configured relative paths resolve from the repository root.
+Configure `DATABASE_URL` in `.env` or the environment. Choose a new database
+before migrating a different seed or snapshot.
+
+Exit codes: `0` for success/PASS, `1` for an operational error or FAIL (including
+a saved FAIL shown by `report`), and `2` for invalid command usage. Rejected
+records are expected in this demo and do not cause failure when accounted for.
+See [runbook step 9d](docs/RUNBOOK.md#9d-phase-7-use-the-unified-cli) for the owner walkthrough.
 
 ## Generate synthetic legacy data
 
-The standalone generator is available now; the unified CLI comes in Phase 7.
-Use an explicit output directory so the script has no hardcoded data path.
+The original standalone generator remains available for individual-step practice.
+It uses an explicit output directory and its own argument defaults:
 
 ```powershell
 .\.venv\Scripts\python.exe -m migration.generate_legacy_data --output-dir data/legacy
@@ -281,7 +325,8 @@ loan-portfolio-data-migration/
     ├── test_validate.py
     ├── test_config.py
     ├── test_load.py
-    └── test_reconcile.py
+    ├── test_reconcile.py
+    └── test_cli.py
 ```
 
 ## Implementation phases
@@ -293,7 +338,7 @@ loan-portfolio-data-migration/
 4. **Validate — complete:** named rules and rejected-record reports.
 5. **Load — complete:** constrained schema, transactions, and idempotent loading.
 6. **Reconcile — complete:** counts, rejection breakdown, and PASS/FAIL accounting.
-7. CLI and tests: commands and meaningful end-to-end checks.
+7. **CLI and tests — complete:** commands and meaningful end-to-end checks.
 8. Documentation: architecture diagram, usage examples, and example report.
 
 See [design decisions](docs/DESIGN.md) for implementation choices and open topics.

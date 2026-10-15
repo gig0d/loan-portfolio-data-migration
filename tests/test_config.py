@@ -15,6 +15,8 @@ def test_defaults_resolve_from_checkout_not_working_directory(tmp_path: Path) ->
     )
     assert settings.legacy_data_dir == tmp_path / "data/legacy"
     assert settings.schema_path == tmp_path / "sql/schema.sql"
+    assert settings.customer_count == 1000
+    assert settings.random_seed == 42
 
 
 def test_environment_overrides_dotenv_without_mutating_it(tmp_path: Path) -> None:
@@ -55,3 +57,27 @@ def test_mysql_credentials_are_parsed_but_redacted(tmp_path: Path) -> None:
 def test_invalid_log_level_is_actionable(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="LOG_LEVEL"):
         load_settings(tmp_path, environ={"LOG_LEVEL": "QUIET"})
+
+
+@pytest.mark.parametrize(
+    "values, message",
+    [
+        ({"CUSTOMER_COUNT": "0"}, "CUSTOMER_COUNT must be at least 1"),
+        ({"CUSTOMER_COUNT": "many"}, "CUSTOMER_COUNT must be an integer"),
+        ({"RANDOM_SEED": "invalid"}, "RANDOM_SEED must be an integer"),
+    ],
+)
+def test_generation_settings_are_validated(
+    tmp_path: Path, values: dict[str, str], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        load_settings(tmp_path, environ=values)
+
+
+def test_generation_environment_overrides_dotenv(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text(
+        "CUSTOMER_COUNT=20\nRANDOM_SEED=7\n", encoding="utf-8"
+    )
+    settings = load_settings(tmp_path, environ={"RANDOM_SEED": "42"})
+    assert settings.customer_count == 20
+    assert settings.random_seed == 42

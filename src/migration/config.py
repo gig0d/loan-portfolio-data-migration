@@ -21,11 +21,20 @@ class Settings:
     output_data_dir: Path
     schema_path: Path
     log_level: str
+    customer_count: int
+    random_seed: int
 
 
 def _resolve_path(root: Path, value: str) -> Path:
     path = Path(value).expanduser()
     return (root / path).resolve() if not path.is_absolute() else path.resolve()
+
+
+def _integer_setting(values: Mapping[str, str], name: str, default: int) -> int:
+    try:
+        return int(values.get(name, str(default)))
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer.") from exc
 
 
 def load_settings(
@@ -62,6 +71,10 @@ def load_settings(
     log_level = values.get("LOG_LEVEL", "INFO").upper()
     if log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
         raise ValueError("LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL.")
+    customer_count = _integer_setting(values, "CUSTOMER_COUNT", 1000)
+    if customer_count < 1:
+        raise ValueError("CUSTOMER_COUNT must be at least 1.")
+    random_seed = _integer_setting(values, "RANDOM_SEED", 42)
     return Settings(
         database_url=url,
         legacy_data_dir=_resolve_path(
@@ -72,4 +85,6 @@ def load_settings(
         ),
         schema_path=_resolve_path(root, values.get("SCHEMA_PATH", "sql/schema.sql")),
         log_level=log_level,
+        customer_count=customer_count,
+        random_seed=random_seed,
     )

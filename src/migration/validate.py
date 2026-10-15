@@ -361,7 +361,7 @@ def run_validation(input_dir: Path, output_dir: Path) -> ValidationResult:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the standalone validation step; database loading remains deferred."""
+    """Run validation alone without loading the database."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)

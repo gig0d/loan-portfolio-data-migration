@@ -175,7 +175,7 @@ def generate_legacy_data(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the standalone generator; the unified CLI will arrive in Phase 7."""
+    """Run the standalone generator with explicit arguments and fixed defaults."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--customers", "--size", type=int, default=1000)
