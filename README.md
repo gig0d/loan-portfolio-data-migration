@@ -1,13 +1,13 @@
 # Loan Portfolio Data Migration & Data Quality Pipeline
 
-A portfolio project that will migrate messy, **synthetic** loan portfolio CSV
+A portfolio project that migrates messy, **synthetic** loan portfolio CSV
 exports into a normalized relational database, with data quality checks,
 rejected-record reports, and reconciliation.
 
-**Current status: Phase 5 complete (database loading).** Synthetic exports can
-be cleaned, validated, and loaded into constrained relational tables. Repeated
-loads preserve identical records; failures roll back all new portfolio rows.
-Reconciliation is planned for Phase 6.
+**Current status: Phase 6 complete (reconciliation).** Synthetic exports can be
+cleaned, validated, loaded, and accounted for in a Markdown report. Repeated
+loads preserve identical records; data-load failures roll back all new rows.
+The unified CLI and final documentation remain planned for Phases 7 and 8.
 
 New to the project? Follow the [owner's walkthrough](docs/RUNBOOK.md) from setup
 onward. It separates what is already prepared from your own steps in VS Code,
@@ -217,6 +217,32 @@ To try MySQL, follow the optional setup in the runbook and set `DATABASE_URL` in
 your ignored `.env`. It requires MySQL 8.0.16+ and InnoDB. The SQLite tests pass;
 the live MySQL test is skipped until an empty test server database is supplied.
 
+## Reconcile source records and migration outcomes
+
+```powershell
+.\.venv\Scripts\python.exe -m migration.reconcile
+```
+
+The standalone command reads the loader's configuration, validates and loads the
+current source snapshot, then writes `data/output/migration_report.md`. Repeating
+it safely confirms existing identical records. No separate load command is
+required first. It uses outcomes from the same attempt, rather than guessing
+from exported CSVs or counting unrelated database records.
+
+The report includes read, cleaned, rejected, and loaded counts per table, new
+versus existing load outcomes, a rejection breakdown by primary rule, and
+PASS/FAIL diagnostics. Exact duplicates count as rejected; multiple violations
+on one record do not inflate the rejection total. A PASS requires
+`read = loaded + rejected` for every table, consistent stage counts, and exactly
+one outcome for every source row. PASS means accounted for, not defect-free data.
+
+The process exits with code 0 on PASS and 1 on FAIL or error. An incomplete FAIL
+report replaces an earlier result before validation/loading begins; the complete
+report replaces it only after loading commits and accounting finishes. Report
+writes use atomic replacement. The report is local and ignored by Git. Follow
+[runbook step 9c](docs/RUNBOOK.md#9c-phase-6-generate-and-read-the-reconciliation-report)
+for exact PowerShell and preview instructions.
+
 ## Project structure
 
 ```text
@@ -254,7 +280,8 @@ loan-portfolio-data-migration/
     ├── test_transform.py
     ├── test_validate.py
     ├── test_config.py
-    └── test_load.py
+    ├── test_load.py
+    └── test_reconcile.py
 ```
 
 ## Implementation phases
@@ -265,7 +292,7 @@ loan-portfolio-data-migration/
 3. **Extract and transform — complete:** standardize fields and identify duplicates.
 4. **Validate — complete:** named rules and rejected-record reports.
 5. **Load — complete:** constrained schema, transactions, and idempotent loading.
-6. Reconcile: counts, rejection breakdown, and a PASS/FAIL accounting check.
+6. **Reconcile — complete:** counts, rejection breakdown, and PASS/FAIL accounting.
 7. CLI and tests: commands and meaningful end-to-end checks.
 8. Documentation: architecture diagram, usage examples, and example report.
 
@@ -273,7 +300,21 @@ See [design decisions](docs/DESIGN.md) for implementation choices and open topic
 
 ## Example report
 
-TODO (Phase 6): add an example generated from synthetic data.
+Excerpt for the default 1,000 base customers, seed 42:
+
+```text
+Overall status: PASS
+
+Table      Read   Cleaned   Rejected   Loaded   Check
+customers  1100      1050        450      650   PASS
+loans      1000      1000        500      500   PASS
+payments   2000      2000       1050      950   PASS
+Total      4100      4050       2000     2100   PASS
+```
+
+After a repeat load, these totals stay the same: 0 rows are newly inserted and
+2,100 accepted records are confirmed already present. The generated report also
+shows the primary-rule breakdown and explains any failed accounting checks.
 
 ## What I learned
 

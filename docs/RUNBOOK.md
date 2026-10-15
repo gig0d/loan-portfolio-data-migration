@@ -1,4 +1,4 @@
-# Owner's walkthrough: from setup to Phase 5
+# Owner's walkthrough: from setup to Phase 6
 
 This is the complete Windows checklist for the project owner. Follow it in order,
 one command at a time. Paste commands into **PowerShell**, not a Python file or
@@ -9,7 +9,7 @@ fails, stop at that step and use the troubleshooting section.
 
 On the current computer, the assistant has prepared Python's `.venv`, installed
 dependencies, created the project files, generated data, run the pipeline through
-Phase 5, tested it, and pushed the completed phases to your GitHub repository.
+Phase 6, tested it, and pushed the completed phases to your GitHub repository.
 Python and Git are installed. You do not need to recreate files, initialize Git
 again, create another repository, or repeat an existing commit.
 
@@ -24,9 +24,10 @@ portfolio presentation are also your choices.
 | 3: cleanup | Extraction, conversions, duplicate diagnostics | Run step 8 and inspect cleaned data |
 | 4: validation | Named rules, accepted CSVs, rejection report | Run step 9 and read a rejection |
 | 5: loading | SQL schema, transactions, repeat-load handling | Follow step 9a; no SQL server is needed for SQLite |
+| 6: reconciliation | Record counts, rejection breakdown, PASS/FAIL report | Follow step 9c and explain the accounting equation |
 | Checks and GitHub | Tests and phase commits | Verify steps 10-11; commit only your own new changes |
 | Portfolio | README and design explanations | Complete step 12 and write your final learning section |
-| 6-8 | Still planned | Review the current phase before authorizing the next one |
+| 7-8 | Still planned | Review the current phase before authorizing the next one |
 
 **Current-computer route:** start at step 1. Use the verification commands; skip
 installation and cloning branches when the item already exists.
@@ -190,8 +191,9 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
 Open `.env` in VS Code. Keep SQLite and the supplied default paths and seed.
-Leave MySQL's example commented out. The Phase 5 loader reads `.env`; the other
-standalone commands still use explicit arguments. There are no SQLite database
+Leave MySQL's example commented out. The loader and reconciliation command read
+`.env`; generation, transformation, and standalone validation still use explicit
+arguments. There are no SQLite database
 credentials to obtain. Existing `.env` settings are preserved by the command.
 New optional keys such as `SCHEMA_PATH` have defaults, so do not overwrite your
 existing `.env`. Shell environment values override values in this file.
@@ -525,6 +527,89 @@ for the current phase. Follow this route only to try the optional backend.
 7. To return to SQLite, restore its `DATABASE_URL` in `.env`. Do not commit
    database files, passwords, or test connection URLs.
 
+## 9c. Phase 6: generate and read the reconciliation report
+
+Use the default SQLite route. No new software, SQL statements, dependency
+installation, or schema changes are required for this phase.
+
+1. In VS Code, open a PowerShell terminal at the project root (step 1). Keep the
+   default configuration from step 5. Reuse the default source files from step 7.
+   You do not need to regenerate them or run the earlier commands separately.
+2. Run the standalone command:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m migration.reconcile
+   ```
+
+   It reads, cleans, validates, and loads the source data before writing the
+   reconciliation report. The database may already contain this snapshot; that
+   is expected. The final log should say `Reconciliation PASS: wrote ...`.
+3. Immediately check the exit code:
+
+   ```powershell
+   $LASTEXITCODE
+   ```
+
+   Expect `0`. A value of `1` means an accounting FAIL or an execution error;
+   read the terminal error and report rather than continuing as if it passed.
+4. Open `data/output/migration_report.md` in VS Code's Explorer. Press
+   **Ctrl+Shift+V** to preview Markdown. Alternatively, read it in PowerShell:
+
+   ```powershell
+   Get-Content data/output/migration_report.md
+   ```
+
+   Expect **Overall status: PASS** and the default counts:
+
+   | Table | Read | Cleaned | Rejected | Loaded | Check |
+   | --- | ---: | ---: | ---: | ---: | --- |
+   | customers | 1,100 | 1,050 | 450 | 650 | PASS |
+   | loans | 1,000 | 1,000 | 500 | 500 | PASS |
+   | payments | 2,000 | 2,000 | 1,050 | 950 | PASS |
+   | Total | 4,100 | 4,050 | 2,000 | 2,100 | PASS |
+
+5. Practice explaining the customer equation: `1100 = 650 + 450`. The 50 exact
+   duplicates removed before validation are included among the 450 rejections.
+   `Cleaned` is an intermediate count and is not added to the other outcomes.
+   PASS means every source record is accounted for; it does not mean the messy
+   source contained no invalid data.
+6. Read **Load outcomes**. On this computer, expect 0 inserted and 650/500/950
+   already present. These add up to the loaded counts. Repeat the command from
+   item 2, check `$LASTEXITCODE`, and reopen the report. Totals should remain the
+   same, with no duplicated database records.
+7. Read **Rejections by primary rule**. Its counts sum to 2,000, with one rule
+   counted per rejected source record. The first rule is used for this summary;
+   `rejected_records.csv` retains all violations and original source fields.
+   Look up any rule in [VALIDATION_RULES.md](VALIDATION_RULES.md).
+8. Verify that the generated report stays local:
+
+   ```powershell
+   git check-ignore data/output/migration_report.md
+   git status --short --branch
+   ```
+
+   Expect the report path to be ignored and no report staged for Git. This
+   command replaces the local report on each attempt; no new commit is needed
+   just to regenerate it. Then run step 10.
+
+The report begins as a dated incomplete FAIL before validation/loading starts,
+so a failed load does not leave an earlier PASS pretending to describe it. Only
+a completed attempt publishes the full accounting result. Check the timestamp
+and terminal log: configuration errors before the attempt starts, or an
+unwritable output directory, can prevent replacing an old file. Report output
+is separate from the data transaction; if writing fails after a successful
+commit, correct the path/permissions and repeat the command to regenerate it.
+
+Optional explicit paths use the same command, for example:
+
+```powershell
+.\.venv\Scripts\python.exe -m migration.reconcile --input-dir data/legacy --output-dir data/output --schema-path sql/schema.sql
+```
+
+The output directory selects reports and validation CSVs, while `DATABASE_URL`
+still selects the database. Do not change the seed against an existing database
+snapshot; follow the separate-database guidance in step 9a instead.
+
 ## 10. Run checks and verify that outputs stay local
 
 Run one at a time:
@@ -553,7 +638,7 @@ git status --short --branch
 
 Refresh GitHub's **Code** tab on branch `main` and open its commit history. Expect
 the same latest commit and changed files. This phase's message is
-`feat: load validated portfolio data transactionally`.
+`feat: add migration reconciliation report`.
 
 If you later make a real README change, such as writing your learning section,
 use this separate workflow:
@@ -597,12 +682,12 @@ do not force-push.
 
 | Phase | Assistant work | Your task afterward |
 | --- | --- | --- |
-| 6 | Reconciliation report and PASS/FAIL | Read the report and explain source accounting |
 | 7 | Unified CLI | Practice the simpler `generate`, `run`, and `report` commands |
 | 8 | Final diagram, documentation, report example | Write your learning section and review the GitHub presentation |
 
 Phase 5's default SQL steps are available in step 9a. The optional MySQL route
-is step 9b; it is not needed to complete the remaining phases with SQLite.
+is step 9b. Phase 6's report steps are in step 9c. The optional MySQL route is
+not needed to complete the remaining phases with SQLite.
 
 ## Troubleshooting: stop at the failing step
 
@@ -617,6 +702,8 @@ is step 9b; it is not needed to complete the remaining phases with SQLite.
 | Cannot write output | Close applications holding the CSV open; check the directory is writable |
 | Changed existing ID during load | Review the snapshot; use a new database filename for a different seed |
 | Database load failed | Check the configured database, schema, permissions, and constraints; no new portfolio rows were committed |
+| Reconciliation reports FAIL | Read Accounting diagnostics and the terminal log; do not treat an incomplete run as a migration PASS |
+| Cannot write migration report | Check the output directory and close applications locking the file; a completed database commit remains committed, so repeat after fixing output access |
 | `No module named sqlite3.__main__` | Python 3.11 lacks the bundled shell; use the inspection snippet in step 9a |
 | Dubious ownership | Use the exact-directory trust instructions in step 3 |
 | Nothing to commit | Check status; no commit is needed for unchanged files |

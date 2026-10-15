@@ -34,7 +34,7 @@
 
 - Run the optional live MySQL integration test on a disposable server database.
 - Use the explicit duplicate rejection outcomes in the final reconciliation
-  check so it can account for every source record.
+  check so it can account for every source record (implemented in Phase 6).
 
 ## Phase 2: synthetic legacy generator
 
@@ -272,3 +272,51 @@ integrity; they do not replace rejected-record explanations.
   foreign keys, unique emails, positive amounts, status constraints, exact cents,
   changed-ID rollback after new parent inserts, child-failure rollback, repeat
   loading, empty accepted sets, configuration precedence, and command errors.
+
+## Phase 6: source reconciliation report
+
+- **Use one attempt's typed outcomes.** `run_reconciliation` reuses validation
+  and the committed `LoadResult`, then writes `migration_report.md`. The
+  standalone module performs validation/loading itself, so its counts cannot
+  come from stale inspection CSVs or an unrelated database snapshot. The
+  unified CLI is still deferred to Phase 7.
+- **Reconcile each table, not just totals.** The main equation is `read = loaded
+  + rejected`. Cleaned rows are retained after exact duplicate removal and still
+  include records later rejected. Removed duplicates count in rejected records.
+  The check also compares accepted versus loaded counts, read versus cleaned
+  plus removed duplicates, and the complete source-row partition. Each original
+  record position must appear once across accepted/rejected outcomes. Opposite
+  errors in two tables cannot cancel into an overall PASS.
+- **Loaded includes confirmed existing records.** Reports show inserted and
+  already-present counts separately, then add them for the current run's loaded
+  count. Repeated runs can pass with zero inserts. Existing database rows outside
+  the current source snapshot are not counted. This is source reconciliation,
+  not a database inventory or an independent post-commit audit under concurrent
+  database changes.
+- **Primary-rule counts avoid double-counting.** The rejection breakdown groups
+  the existing `rule` column by table. A row with several failures contributes
+  once, while the full `violations` JSON remains in `rejected_records.csv`.
+  Reports contain counts and rule codes, without raw source payloads, local
+  connection URLs, or credentials.
+- **PASS means accounting completeness.** Deliberately rejected rows do not
+  cause FAIL when accounted for. FAIL can indicate an incomplete attempt or
+  inconsistent outcomes. It is not a claim that all accepted data is correct
+  beyond the implemented rules. Commands return 0 on PASS and 1 on FAIL/error.
+- **Make incomplete attempts visible.** Once configuration and the engine are
+  prepared, the command replaces the previous report with a dated incomplete
+  FAIL before validation or loading. A successful commit and completed checks
+  produce the final report. UTF-8 text is written to a temporary file in the same
+  directory, then atomically replaced, preventing partially written reports.
+  Configuration/startup failures before this step cannot update the old report;
+  the timestamp and terminal exit code identify the attempt. A report-writing
+  failure after commit cannot roll back that committed data; repeat the command
+  after fixing the output path to confirm existing rows and regenerate it.
+- **Stay local and reproducible in scope.** Reports use the configured output
+  directory and remain ignored by Git. Each report includes a runtime UTC
+  timestamp; counts are reproducible for the same synthetic snapshot and rules,
+  while report bytes can differ by time and first-versus-repeat load outcomes.
+- **Exercise failure paths as well as PASS.** Tests run the default 1,000-customer
+  snapshot through SQLite twice, check known counts, detect missing outcomes,
+  cancelling table errors, duplicated provenance, and missing duplicate counts,
+  and cover empty/all-rejected inputs, invalid counters, report replacement,
+  filesystem errors, failed-load markers, and standalone command exit codes.
