@@ -1,5 +1,9 @@
 # Design decisions
 
+This is a chronological record of the eight implementation phases. Earlier
+sections describe the plans and state at that time; later phases record their
+implementation. See the README for current behavior and the runbook for commands.
+
 ## Phase 1: setup
 
 - **Synthetic data only.** A script will generate every customer, loan, and
@@ -30,11 +34,9 @@
   `sql/schema.sql` contains only comments. Configuration, CLI commands, and
   database creation are deliberately deferred until their authorized phases.
 
-## Topics to resolve in later phases
+## Remaining optional verification
 
 - Run the optional live MySQL integration test on a disposable server database.
-- Use the explicit duplicate rejection outcomes in the final reconciliation
-  check so it can account for every source record (implemented in Phase 6).
 
 ## Phase 2: synthetic legacy generator
 
@@ -363,3 +365,29 @@ integrity; they do not replace rejected-record explanations.
   inconsistent accounting, absent reports/inputs, malformed saved statuses,
   usage errors, and credential redaction. Earlier transformation and named-rule
   unit tests remain part of the full suite.
+
+## Phase 8: recruiter-facing documentation
+
+- **Lead with the problem and observable result.** The README opens with the
+  migration purpose, three key behaviors, and a default report excerpt before
+  setup details. A reviewer can assess the project without first installing it.
+  The full Windows walkthrough remains in RUNBOOK.md for the owner's practice.
+- **Keep architecture in source control as Mermaid.** The diagram follows the
+  actual generator, extraction, transformation, validation, transaction, and
+  reconciliation calls. Rejections branch from validation, and the report uses
+  source and committed load outcomes. Mermaid is plain text and is supported in
+  [GitHub Markdown](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams),
+  so no generated image or diagram dependency is added to the project.
+- **Use measured examples without tracking runtime artifacts.** The README
+  shows the default 1,000-base-customer, seed-42 counts and selected primary-rule
+  rows from the generated report. Partial rule rows are labeled as examples;
+  full accounting is in the ignored report. Timestamps and runtime files are
+  not copied into Git. First versus repeat loading is explained explicitly.
+- **Separate completed implementation from personal ownership.** All eight
+  implementation phases are complete. The owner's learning section remains a
+  TODO, with no invented reflection or claim about skills they have not described.
+  The runbook closes with a review/demo checklist and personal portfolio tasks.
+- **State the tested scope precisely.** Documentation retains SQLite as the
+  verified default, notes the unexecuted live MySQL test, and explains source
+  accounting, changed-ID behavior, and optional inspection outputs. A documentation
+  pass does not expand the implementation's guarantees.

@@ -1,6 +1,6 @@
 # Validation rule catalog
 
-These are the Phase 4 rules for this synthetic demo. All business fields in the
+These are the 13 validation rules for this synthetic demo. All business fields in the
 legacy contract are required. Metadata such as `_source_row` is not a business
 field. A blank required value gets `VR003` rather than an additional format error
 for that same blank field.
@@ -50,7 +50,8 @@ These are project rules, not regulatory or credit-underwriting requirements.
 
 Primary rejection counts group by `rule` and add up to rejected records.
 Counting every entry in `violations` measures rule occurrences, which can exceed
-the number of rejected records. Future reconciliation must distinguish them.
+the number of rejected records. Reconciliation groups by the primary `rule`
+column so each rejected source record contributes once.
 
 With the default generator, there are 650 accepted customers, 500 loans, and
 950 payments. Rejected counts are 450, 500, and 1,050. The 50 removed exact

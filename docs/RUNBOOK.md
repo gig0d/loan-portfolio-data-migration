@@ -1,4 +1,4 @@
-# Owner's walkthrough: from setup to Phase 7
+# Owner's walkthrough: setup, execution, and final portfolio review
 
 This is the complete Windows checklist for the project owner. Follow it in order,
 one command at a time. Paste commands into **PowerShell**, not a Python file or
@@ -8,8 +8,8 @@ fails, stop at that step and use the troubleshooting section.
 ## Start here: what is already done and what is yours to do
 
 On the current computer, the assistant has prepared Python's `.venv`, installed
-dependencies, created the project files, generated data, run the pipeline through
-Phase 7, tested it, and pushed the completed phases to your GitHub repository.
+dependencies, created the project files, generated data, run the complete
+pipeline, tested it, and pushed all eight phases to your GitHub repository.
 Python and Git are installed. You do not need to recreate files, initialize Git
 again, create another repository, or repeat an existing commit.
 
@@ -26,9 +26,9 @@ portfolio presentation are also your choices.
 | 5: loading | SQL schema, transactions, repeat-load handling | Follow step 9a; no SQL server is needed for SQLite |
 | 6: reconciliation | Record counts, rejection breakdown, PASS/FAIL report | Follow step 9c and explain the accounting equation |
 | 7: CLI | Unified commands and tests across real processes | Follow step 9d for the everyday workflow |
+| 8: documentation | README, architecture diagram, example results, final review guide | Follow step 13, then write your own learning section |
 | Checks and GitHub | Tests and phase commits | Verify steps 10-11; commit only your own new changes |
 | Portfolio | README and design explanations | Complete step 12 and write your final learning section |
-| 8 | Still planned | Review the current phase before authorizing the next one |
 
 **Current-computer route:** start at step 1. Use the verification commands; skip
 installation and cloning branches when the item already exists.
@@ -727,7 +727,7 @@ git status --short --branch
 
 Refresh GitHub's **Code** tab on branch `main` and open its commit history. Expect
 the same latest commit and changed files. This phase's message is
-`feat: add unified migration CLI and end-to-end tests`.
+`docs: complete portfolio documentation and architecture diagram`.
 
 If you later make a real README change, such as writing your learning section,
 use this separate workflow:
@@ -761,17 +761,49 @@ do not force-push.
    save. See [GitHub's pinning guide](https://docs.github.com/en/account-and-profile/how-tos/profile-customization/pinning-items-to-your-profile).
 5. Read `docs/DESIGN.md`. Practice explaining how an invalid customer can also
    prevent acceptance of its loan and payments.
-6. At the end of Phase 8, write **What I learned** in the README yourself, in
+6. After reviewing Phase 8, write **What I learned** in the README yourself, in
    English, describing what you actually understand. That section stays a TODO
    until you write it.
-7. Add the repository link to your CV and applications. During development,
-   describe it as in progress and mention the completed phase.
+7. Add the repository link to your CV and applications. Describe the implemented
+   SQLite workflow accurately; keep live MySQL verification separate until run.
 
-## Your tasks in the remaining phases
+## 13. Phase 8: review and present the finished project
 
-| Phase | Assistant work | Your task afterward |
-| --- | --- | --- |
-| 8 | Final diagram, documentation, report example | Write your learning section and review the GitHub presentation |
+All eight implementation phases are complete. This final owner checklist needs
+no new application, SQL server, or installation.
+
+1. Open the [GitHub repository](https://github.com/gig0d/loan-portfolio-data-migration)
+   in your browser. Select branch `main` and read the README on the Code page.
+   Confirm that the purpose, example PASS table, and architecture are visible.
+   The diagram is stored as a Mermaid code block; see
+   [GitHub's diagram documentation](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams).
+2. In VS Code, open `README.md` and press **Ctrl+Shift+V** to review the Markdown
+   text, tables, and links. GitHub is the final place to check the diagram.
+   Read `docs/DESIGN.md` as a chronological decision record: early plans describe
+   the state at that phase, while the final README describes the current project.
+3. Practice a short demo using the commands in step 9d: generate the default
+   synthetic snapshot, run the migration, and display the report. Keep the
+   default size/seed against the current database. Run again to demonstrate
+   zero new inserts and unchanged loaded counts. No new commit is needed.
+4. Open one rejection using step 9 and the rule catalog. Be ready to explain
+   why a rejected customer can prevent its loan and payments from being loaded.
+   Then explain the report equation `4100 = 2100 + 2000` and why PASS does not
+   mean that all source records were valid.
+5. Explain two database choices in your own words: why money is stored in
+   integer cents, and why a changed existing ID stops the transaction. Use
+   `sql/schema.sql` and the Phase 5 design notes as references.
+6. Replace only the **What I learned** TODO with your own English reflection.
+   Consider what you understand about cleanup versus validation, foreign keys,
+   rollback, idempotency, and reconciliation. Mention a difficulty you actually
+   encountered and how you resolved it. Do not claim live MySQL experience from
+   the skipped integration test. The assistant leaves this section unwritten.
+7. Use step 11 to review, commit, and push that README change. Then complete the
+   GitHub presentation choices in step 12 and check that your CV links to the
+   correct repository.
+
+The remaining personal task is the learning section and your own explanation
+of the project. Optional live MySQL verification remains available in step 9b;
+it is not required to demonstrate the tested SQLite workflow.
 
 Phase 5's default SQL steps are available in step 9a. The optional MySQL route
 is step 9b. Phase 6's report steps are in step 9c, and the unified CLI workflow
